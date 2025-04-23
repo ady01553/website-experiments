@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en" class="">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive 24-Hour Sectograph</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        // Tailwind dark mode configuration
+        tailwind.config = {
+            darkMode: 'class', // Enable class-based dark mode
+             theme: {
+                extend: {
+                 fontFamily: {
+                    sans: ['Inter', 'sans-serif'], // Ensure Inter is default sans font
+                 },
+                },
+             },
+        }
+        // Function to apply saved theme on initial load
+        function applyInitialTheme() {
+            const savedTheme = localStorage.getItem('theme') || 'light'; // Default to light
+            if (savedTheme === 'dark') {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+            // Update toggle switch state after DOM is loaded
+            document.addEventListener('DOMContentLoaded', () => {
+                const themeToggle = document.getElementById('themeToggle');
+                if (themeToggle) {
+                    themeToggle.checked = (savedTheme === 'dark');
+                }
+            });
+        }
+        applyInitialTheme(); // Apply theme immediately
+    </script>
+    <style>
+        /* Custom styles for better visuals */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Ensure canvas is responsive and centered */
+        canvas {
+            display: block;
+            max-width: 400px; /* Limit max size */
+            width: 90%;      /* Responsive width */
+            aspect-ratio: 1 / 1; /* Maintain square shape */
+            margin: 1rem auto; /* Center horizontally */
+            cursor: grab; /* Indicate interactivity */
+            touch-action: none; /* Crucial for touch rotation */
+            border-radius: 50%; /* Make canvas visually circular */
+            transition: border-color 0.3s;
+        }
+        canvas:active {
+             cursor: grabbing;
+        }
+        /* Style for the segment list items */
+        .segment-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem;
+            border-radius: 0.375rem; /* rounded-md */
+            margin-bottom: 0.5rem;
+            transition: background-color 0.3s;
+        }
+        .segment-color-preview {
+            width: 1rem;
+            height: 1rem;
+            border-radius: 50%; /* rounded-full */
+            margin-right: 0.5rem;
+            border: 1px solid rgba(0,0,0,0.1);
+            flex-shrink: 0; /* Prevent shrinking */
+        }
+        /* Style for remove button */
+        .remove-btn {
+            background-color: #ef4444; /* bg-red-500 */
+            color: white;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.375rem; /* rounded-md */
+            font-size: 0.875rem; /* text-sm */
+            cursor: pointer;
+            transition: background-color 0.2s;
+            flex-shrink: 0; /* Prevent shrinking */
+        }
+        .remove-btn:hover {
+            background-color: #dc2626; /* hover:bg-red-600 */
+        }
+         /* Dark mode styles for remove button */
+         .dark .remove-btn {
+             background-color: #b91c1c; /* dark:bg-red-700 */
+         }
+         .dark .remove-btn:hover {
+             background-color: #991b1b; /* dark:hover:bg-red-800 */
+         }
+
+        /* Style for add button */
+        .add-btn {
+            background-color: #22c55e; /* bg-green-500 */
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem; /* rounded-md */
+            font-size: 1rem; /* text-base */
+            cursor: pointer;
+            transition: background-color 0.2s;
+            width: 100%; /* Make button full width */
+            margin-top: 1rem;
+        }
+        .add-btn:hover {
+            background-color: #16a34a; /* hover:bg-green-600 */
+        }
+         /* Dark mode styles for add button */
+         .dark .add-btn {
+             background-color: #15803d; /* dark:bg-green-700 */
+         }
+         .dark .add-btn:hover {
+             background-color: #166534; /* dark:hover:bg-green-800 */
+         }
+
+        /* Input field styling */
+        input[type="text"], input[type="time"], input[type="color"] {
+            border: 1px solid #d1d5db; /* border-gray-300 */
+            border-radius: 0.375rem; /* rounded-md */
+            padding: 0.5rem;
+            width: 100%;
+            background-color: white; /* Default light bg */
+            color: #1f2937; /* Default light text */
+            transition: background-color 0.3s, border-color 0.3s, color 0.3s;
+        }
+        input[type="color"] {
+            padding: 0.25rem; /* Smaller padding for color input */
+            height: 2.5rem; /* Match height of other inputs */
+        }
+        label {
+            display: block;
+            margin-bottom: 0.25rem;
+            font-weight: 500; /* font-medium */
+            transition: color 0.3s;
+        }
+         /* Dark mode styles for inputs/labels */
+         .dark input[type="text"], .dark input[type="time"] {
+             background-color: #374151; /* dark:bg-gray-700 */
+             border-color: #4b5563; /* dark:border-gray-600 */
+             color: #f3f4f6; /* dark:text-gray-100 */
+         }
+          .dark input[type="color"] { /* Color input needs specific styling */
+             background-color: #374151;
+             border-color: #4b5563;
+         }
+         /* Style the theme toggle switch */
+        .theme-switch-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem; /* space-x-2 */
+        }
+        .theme-switch {
+            display: inline-block;
+            height: 24px; /* h-6 */
+            position: relative;
+            width: 44px; /* w-11 */
+        }
+        .theme-switch input {
+            display: none;
+        }
+        .slider {
+            background-color: #ccc; /* Default light bg */
+            bottom: 0;
+            cursor: pointer;
+            left: 0;
+            position: absolute;
+            right: 0;
+            top: 0;
+            transition: .4s;
+            border-radius: 24px; /* rounded-full */
+        }
+        .slider:before {
+            background-color: #fff; /* Knob color */
+            bottom: 4px;
+            content: "";
+            height: 16px; /* h-4 */
+            left: 4px;
+            position: absolute;
+            transition: .4s;
+            width: 16px; /* w-4 */
+            border-radius: 50%;
+        }
+        input:checked + .slider {
+            background-color: #4f46e5; /* bg-indigo-600 */
+        }
+        input:checked + .slider:before {
+            transform: translateX(20px); /* Translate width - knob width - margin */
+        }
+         /* Dark mode for slider */
+         .dark .slider {
+            background-color: #4b5563; /* dark:bg-gray-600 */
+         }
+
+    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 p-4 md:p-8 transition-colors duration-300">
+
+    <div class="container mx-auto max-w-4xl bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg transition-colors duration-300">
+
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-2xl md:text-3xl font-bold text-center text-gray-800 dark:text-gray-100 transition-colors duration-300 flex-grow">
+                Interactive 24-Hour Sectograph
+            </h1>
+            <div class="theme-switch-wrapper">
+                 <span class="text-sm text-gray-600 dark:text-gray-400">☀️</span>
+                 <label class="theme-switch" for="themeToggle">
+                     <input type="checkbox" id="themeToggle">
+                     <span class="slider"></span>
+                 </label>
+                 <span class="text-sm text-gray-600 dark:text-gray-400">🌙</span>
+             </div>
+        </div>
+
+
+        <canvas id="sectographCanvas" class="border-2 border-transparent dark:border-gray-700"></canvas>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+            <div class="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg border border-gray-200 dark:border-gray-600 transition-colors duration-300">
+                <h2 class="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-4 transition-colors duration-300">Add New Segment</h2>
+                <form id="addSegmentForm">
+                    <div class="mb-4">
+                        <label for="segmentLabel" class="text-sm text-gray-700 dark:text-gray-300">Label:</label>
+                        <input type="text" id="segmentLabel" required class="text-sm">
+                    </div>
+                    <div class="grid grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <label for="startTime" class="text-sm text-gray-700 dark:text-gray-300">Start Time:</label>
+                            <input type="time" id="startTime" required class="text-sm">
+                        </div>
+                        <div>
+                            <label for="endTime" class="text-sm text-gray-700 dark:text-gray-300">End Time:</label>
+                            <input type="time" id="endTime" required class="text-sm">
+                        </div>
+                    </div>
+                     <div class="mb-4">
+                        <label for="segmentColor" class="text-sm text-gray-700 dark:text-gray-300">Color:</label>
+                        <input type="color" id="segmentColor" value="#3b82f6" class="h-10">
+                    </div>
+                    <button type="submit" class="add-btn">Add Segment</button>
+                </form>
+                 <p id="error-message" class="text-red-500 dark:text-red-400 text-sm mt-2"></p>
+            </div>
+
+            <div class="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg border border-gray-200 dark:border-gray-600 transition-colors duration-300">
+                <h2 class="text-xl font-semibold text-gray-700 dark:text-gray-200 mb-4 transition-colors duration-300">Current Segments</h2>
+                <div id="segmentList" class="max-h-60 overflow-y-auto">
+                    <p class="text-gray-500 dark:text-gray-400 text-sm">No segments added yet.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('sectographCanvas');
+        const ctx = canvas.getContext('2d');
+        const addSegmentForm = document.getElementById('addSegmentForm');
+        const segmentListDiv = document.getElementById('segmentList');
+        const errorMessageP = document.getElementById('error-message');
+        const themeToggle = document.getElementById('themeToggle');
+
+        const STORAGE_KEY = 'sectographSegments';
+        const THEME_KEY = 'theme';
+
+        // --- State Variables ---
+        let segments = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+        let currentRotationOffset = 0; // Angle offset for rotation (in radians)
+        let isDragging = false;
+        let dragStartAngle = 0; // Angle of the initial touch/click relative to center
+        let lastDragAngle = 0; // Last angle during drag
+
+
+        // --- Data Handling ---
+        function saveSegments() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(segments));
+        }
+
+        // --- Theme Handling ---
+        function toggleTheme() {
+            const isDark = themeToggle.checked;
+            document.documentElement.classList.toggle('dark', isDark);
+            localStorage.setItem(THEME_KEY, isDark ? 'dark' : 'light');
+            drawSectograph(); // Redraw canvas with new theme colors
+        }
+
+        // --- Time/Angle/Color Conversion ---
+        function timeToMinutes(timeString) {
+            if (!timeString) return 0;
+            const [hours, minutes] = timeString.split(':').map(Number);
+            return hours * 60 + minutes;
+        }
+
+        function minutesToAngle(minutes) {
+            const proportionOfDay = minutes / (24 * 60);
+            return proportionOfDay * 2 * Math.PI - Math.PI / 2; // 00:00 at top (-PI/2)
+        }
+
+        // Helper function to get contrasting text color (black or white)
+        function getContrastColor(hexColor) {
+             if (!hexColor) return '#000000'; // Default to black if color is invalid
+             hexColor = hexColor.replace('#', '');
+             if (hexColor.length === 3) { // Handle shorthand hex (e.g., #000)
+                 hexColor = hexColor.split('').map(char => char + char).join('');
+             }
+             if (hexColor.length !== 6) return '#000000'; // Invalid hex length
+
+             const r = parseInt(hexColor.substring(0, 2), 16);
+             const g = parseInt(hexColor.substring(2, 4), 16);
+             const b = parseInt(hexColor.substring(4, 6), 16);
+             const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255; // Simplified luminance calc
+             return luminance > 0.5 ? '#000000' : '#ffffff';
+         }
+
+        // --- Drawing Functions ---
+        function drawSectograph() {
+            const isDarkMode = document.documentElement.classList.contains('dark');
+            const canvasSize = canvas.width;
+            const centerX = canvasSize / 2;
+            const centerY = canvasSize / 2;
+            const radius = canvasSize * 0.42;
+
+            // --- Theme Colors ---
+            const bgColor = isDarkMode ? '#1f2937' : '#f3f4f6';
+            const markerColor = isDarkMode ? '#6b7280' : '#9ca3af';
+            const hourTextColor = isDarkMode ? '#d1d5db' : '#4b5563';
+            const centerCircleFill = isDarkMode ? '#374151' : '#ffffff';
+            const borderColor = isDarkMode ? '#4b5563' : '#d1d5db';
+
+            // Clear canvas
+            ctx.clearRect(0, 0, canvasSize, canvasSize);
+
+            // Draw clock face background
+            ctx.fillStyle = bgColor;
+            ctx.fillRect(0, 0, canvasSize, canvasSize);
+
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+            ctx.strokeStyle = borderColor;
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+
+            // Draw hour markers and labels (rotated position, horizontal text)
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = markerColor;
+            for (let i = 0; i < 24; i++) {
+                // Calculate the angle including the current rotation
+                const angle = (i / 24) * 2 * Math.PI - Math.PI / 2 + currentRotationOffset;
+                const cosAngle = Math.cos(angle);
+                const sinAngle = Math.sin(angle);
+
+                // Draw the marker line
+                const startX = centerX + cosAngle * (radius * 0.95);
+                const startY = centerY + sinAngle * (radius * 0.95);
+                const endX = centerX + cosAngle * radius;
+                const endY = centerY + sinAngle * radius;
+                ctx.beginPath();
+                ctx.moveTo(startX, startY);
+                ctx.lineTo(endX, endY);
+                ctx.stroke();
+
+                // Draw the hour number (every 3 hours)
+                if (i % 3 === 0) {
+                     // Calculate the position for the text
+                     const textX = centerX + cosAngle * (radius * 1.08);
+                     const textY = centerY + sinAngle * (radius * 1.08);
+                     ctx.fillStyle = hourTextColor;
+                     ctx.font = `${Math.max(8, canvasSize * 0.035)}px Inter`;
+                     ctx.textAlign = 'center';
+                     ctx.textBaseline = 'middle';
+
+                     // *** MODIFIED: Draw text horizontally directly at the calculated position ***
+                     // No save/restore or context rotation needed for the text itself
+                     ctx.fillText(i.toString().padStart(2, '0'), textX, textY);
+                }
+            }
+
+            // Draw segments (rotated position, horizontal text)
+            segments.forEach(segment => {
+                const startMinutes = timeToMinutes(segment.start);
+                const endMinutes = timeToMinutes(segment.end);
+                let startAngle = minutesToAngle(startMinutes);
+                let endAngle = minutesToAngle(endMinutes);
+
+                // Calculate sweep angle, handling wrap-around
+                let sweepAngle = endAngle - startAngle;
+                if (sweepAngle < 0) {
+                    sweepAngle += 2 * Math.PI;
+                }
+                 // Handle full day / zero duration segments
+                 if (startMinutes === endMinutes && segments.length === 1) {
+                     sweepAngle = 2 * Math.PI;
+                 } else if (startMinutes === endMinutes) {
+                    sweepAngle = 0;
+                 }
+
+                 if (sweepAngle <= 0) return; // Skip if no duration
+
+                // Calculate rotated start/end angles for the arc
+                const startAngleRotated = startAngle + currentRotationOffset;
+                const endAngleRotated = startAngleRotated + sweepAngle;
+
+                // Draw the segment arc
+                ctx.beginPath();
+                ctx.moveTo(centerX, centerY);
+                ctx.arc(centerX, centerY, radius, startAngleRotated, endAngleRotated);
+                ctx.lineTo(centerX, centerY);
+                ctx.closePath();
+                ctx.fillStyle = segment.color;
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(0,0,0,0.1)'; // Subtle border
+                ctx.lineWidth = 0.5;
+                ctx.stroke();
+
+                // --- Draw Segment Label (Horizontal) ---
+                const minSweepForLabel = 0.15; // Minimum angle to show label
+                if (segment.label && sweepAngle > minSweepForLabel) {
+                    // Calculate position based on the rotated mid-angle
+                    const midAngleRotated = startAngleRotated + sweepAngle / 2;
+                    const textRadius = radius * 0.65; // Position inside segment
+                    const labelX = centerX + Math.cos(midAngleRotated) * textRadius;
+                    const labelY = centerY + Math.sin(midAngleRotated) * textRadius;
+
+                    ctx.fillStyle = getContrastColor(segment.color); // Contrast color
+                    ctx.font = `${Math.max(7, canvasSize * 0.03)}px Inter`; // Label font size
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+
+                    // Draw text horizontally at the calculated position
+                    ctx.save(); // Save context state (e.g., fillStyle)
+                    ctx.translate(labelX, labelY); // Move origin to text position
+                    // No rotation applied here, text remains horizontal
+                    ctx.fillText(segment.label, 0, 0); // Draw at new origin
+                    ctx.restore(); // Restore context state
+                }
+            });
+
+             // Draw center circle (aesthetic)
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius * 0.1, 0, 2 * Math.PI);
+            ctx.fillStyle = centerCircleFill;
+            ctx.fill();
+        }
+
+        // --- UI Update Functions ---
+        function renderSegmentList() {
+            segmentListDiv.innerHTML = '';
+            errorMessageP.textContent = '';
+
+            if (segments.length === 0) {
+                segmentListDiv.innerHTML = `<p class="text-gray-500 dark:text-gray-400 text-sm">No segments added yet.</p>`;
+                return;
+            }
+
+            const sortedSegments = [...segments].sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));
+
+            sortedSegments.forEach((segment) => {
+                const div = document.createElement('div');
+                div.className = 'segment-item bg-white dark:bg-gray-600';
+                div.dataset.id = segment.id;
+
+                const colorPreview = document.createElement('span');
+                colorPreview.className = 'segment-color-preview';
+                colorPreview.style.backgroundColor = segment.color;
+
+                const textSpan = document.createElement('span');
+                textSpan.textContent = `${segment.label} (${segment.start} - ${segment.end})`;
+                textSpan.className = 'text-sm text-gray-700 dark:text-gray-200 flex-grow mx-2 truncate';
+
+                const removeBtn = document.createElement('button');
+                removeBtn.textContent = 'Remove';
+                removeBtn.className = 'remove-btn';
+                removeBtn.onclick = () => removeSegment(segment.id);
+
+                div.appendChild(colorPreview);
+                div.appendChild(textSpan);
+                div.appendChild(removeBtn);
+                segmentListDiv.appendChild(div);
+            });
+        }
+
+        // --- Event Handlers ---
+        function addSegment(event) {
+            event.preventDefault();
+            errorMessageP.textContent = '';
+            const label = document.getElementById('segmentLabel').value.trim();
+            const start = document.getElementById('startTime').value;
+            const end = document.getElementById('endTime').value;
+            const color = document.getElementById('segmentColor').value;
+
+            if (!label || !start || !end) {
+                 errorMessageP.textContent = 'Please fill in all fields.';
+                return;
+            }
+             const startMinutes = timeToMinutes(start);
+             const endMinutes = timeToMinutes(end);
+             const comparableEndMinutes = (endMinutes === 0 && startMinutes !== 0) ? 24 * 60 : endMinutes;
+             if (startMinutes === comparableEndMinutes) {
+                 errorMessageP.textContent = 'Start and end times cannot be the same.';
+                 return;
+             }
+
+            const newSegment = { id: Date.now(), label, start, end, color };
+            segments.push(newSegment);
+            saveSegments();
+            renderSegmentList();
+            drawSectograph();
+        }
+
+        function removeSegment(idToRemove) {
+            const indexToRemove = segments.findIndex(segment => segment.id === idToRemove);
+            if (indexToRemove !== -1) {
+                segments.splice(indexToRemove, 1);
+                saveSegments();
+                renderSegmentList();
+                drawSectograph();
+            }
+        }
+
+        function resizeCanvas() {
+            const containerWidth = canvas.parentElement.clientWidth;
+            const safeContainerWidth = containerWidth > 0 ? containerWidth : 400;
+            const size = Math.min(safeContainerWidth * 0.9, 400);
+
+            if (canvas.width !== size || canvas.height !== size) {
+                 canvas.width = size;
+                 canvas.height = size;
+                 drawSectograph();
+            }
+        }
+
+        // --- Rotation Event Handlers ---
+        function getEventCoordinates(event) {
+             const rect = canvas.getBoundingClientRect();
+             let x, y;
+             if (event.touches) {
+                 x = event.touches[0].clientX - rect.left;
+                 y = event.touches[0].clientY - rect.top;
+             } else {
+                 x = event.clientX - rect.left;
+                 y = event.clientY - rect.top;
+             }
+             return { x, y };
+         }
+
+        function handleDragStart(event) {
+            isDragging = true;
+            canvas.style.cursor = 'grabbing';
+            const { x, y } = getEventCoordinates(event);
+            const dx = x - canvas.width / 2;
+            const dy = y - canvas.height / 2;
+            dragStartAngle = Math.atan2(dy, dx);
+            lastDragAngle = dragStartAngle;
+             if (event.type === 'touchstart') {
+                  event.preventDefault(); // Prevent scroll only on touch start
+             }
+        }
+
+        function handleDragMove(event) {
+            if (!isDragging) return;
+
+            // Prevent scroll during touch drag
+             if (event.type === 'touchmove') {
+                  event.preventDefault();
+             }
+
+            const { x, y } = getEventCoordinates(event);
+            const dx = x - canvas.width / 2;
+            const dy = y - canvas.height / 2;
+            const currentAngle = Math.atan2(dy, dx);
+
+            let deltaAngle = currentAngle - lastDragAngle;
+
+            // Handle angle wrap around PI/-PI
+            if (deltaAngle > Math.PI) {
+                deltaAngle -= 2 * Math.PI;
+            } else if (deltaAngle < -Math.PI) {
+                deltaAngle += 2 * Math.PI;
+            }
+
+            currentRotationOffset += deltaAngle;
+            lastDragAngle = currentAngle;
+
+            // Use rAF for smoother animation during drag
+            requestAnimationFrame(drawSectograph);
+        }
+
+        function handleDragEnd(event) {
+            if (!isDragging) return;
+            isDragging = false;
+            canvas.style.cursor = 'grab';
+        }
+
+
+        // --- Initialization ---
+        themeToggle.addEventListener('change', toggleTheme);
+        addSegmentForm.addEventListener('submit', addSegment);
+
+        // Rotation listeners
+        canvas.addEventListener('mousedown', handleDragStart);
+        canvas.addEventListener('touchstart', handleDragStart, { passive: false }); // passive:false needed for preventDefault
+
+        window.addEventListener('mousemove', handleDragMove);
+        window.addEventListener('touchmove', handleDragMove, { passive: false }); // passive:false needed for preventDefault
+
+        window.addEventListener('mouseup', handleDragEnd);
+        window.addEventListener('touchend', handleDragEnd);
+        window.addEventListener('mouseleave', handleDragEnd); // Stop drag if mouse leaves window
+
+        // Resize listener
+        window.addEventListener('resize', resizeCanvas);
+
+        // Initial render
+        requestAnimationFrame(() => {
+            resizeCanvas(); // Set initial size and draw
+            renderSegmentList(); // Render segment list
+        });
+
+    </script>
+
+</body>
+</html>

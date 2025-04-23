@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hunstanton Webcams Snapshots</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        /* Basic page setup */
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+            background-color: #111827; /* Dark background */
+            overflow: hidden; /* Prevent scrollbars */
+        }
+
+        /* Grid container styles */
+        .image-grid {
+            display: grid;
+            grid-template-columns: repeat(1, minmax(0, 1fr)); /* 1 column default */
+            gap: 0;
+            padding: 0;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+
+        /* Responsive grid columns */
+        @media (min-width: 640px) { /* sm breakpoint: 2 columns */
+            .image-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                grid-auto-rows: minmax(0, 1fr); /* Distribute height */
+            }
+        }
+        @media (min-width: 1024px) { /* lg breakpoint: 3 columns */
+            .image-grid {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+                grid-auto-rows: minmax(0, 1fr); /* Distribute height */
+            }
+        }
+
+        /* Grid item styles */
+        .grid-item {
+            position: relative;
+            cursor: pointer; /* Indicate items are clickable */
+            overflow: hidden; /* Hide overflowing parts of scaled image on hover */
+        }
+
+        /* Image styles within grid items */
+        .grid-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover; /* Cover the area */
+            display: block;
+            transition: transform 0.3s ease-in-out; /* Smooth hover transition */
+        }
+
+        /* Hover effect */
+        .grid-item:hover img {
+            transform: scale(1.05); /* Slightly larger scale */
+        }
+
+        /* Styles for fullscreen mode */
+        body.fullscreen-active .grid-item:not(.fullscreen) {
+            display: none; /* Hide non-fullscreen items */
+        }
+
+        .grid-item.fullscreen {
+            position: fixed; /* Take item out of flow */
+            top: 0;
+            left: 0;
+            width: 100vw; /* Full viewport width */
+            height: 100vh; /* Full viewport height */
+            z-index: 100; /* Ensure it's on top */
+            cursor: zoom-out; /* Indicate clicking will zoom out */
+            background-color: #000; /* Black background for fullscreen */
+        }
+
+        .grid-item.fullscreen img {
+            object-fit: contain; /* Show the whole image in fullscreen */
+            transform: none; /* Reset hover transform */
+            cursor: zoom-out;
+        }
+
+    </style>
+</head>
+<body>
+    <div class="image-grid">
+        <div class="grid-item">
+            <img src="https://g0.ipcamlive.com/player/snapshot.php?alias=61b75f1acfb75"
+                 alt="Webcam Snapshot: Cliff Top"
+                 onerror="this.onerror=null; this.src='https://placehold.co/600x400/111827/FFFFFF?text=Image+Offline';">
+        </div>
+        <div class="grid-item">
+            <img src="https://g0.ipcamlive.com/player/snapshot.php?alias=6048c34ce07e3"
+                 alt="Webcam Snapshot: North Prom"
+                 onerror="this.onerror=null; this.src='https://placehold.co/600x400/111827/FFFFFF?text=Image+Offline';">
+        </div>
+        <div class="grid-item">
+            <img src="https://g0.ipcamlive.com/player/snapshot.php?alias=61fbdff73470a"
+                 alt="Webcam Snapshot: South Beach"
+                 onerror="this.onerror=null; this.src='https://placehold.co/600x400/111827/FFFFFF?text=Image+Offline';">
+        </div>
+        <div class="grid-item">
+            <img src="https://g0.ipcamlive.com/player/snapshot.php?alias=61df02cf1fd82"
+                 alt="Webcam Snapshot: South Prom"
+                 onerror="this.onerror=null; this.src='https://placehold.co/600x400/111827/FFFFFF?text=Image+Offline';">
+        </div>
+        <div class="grid-item">
+            <img src="https://g0.ipcamlive.com/player/snapshot.php?alias=603f6fc4935a0"
+                 alt="Webcam Snapshot: The Green"
+                 onerror="this.onerror=null; this.src='https://placehold.co/600x400/111827/FFFFFF?text=Image+Offline';">
+        </div>
+        </div>
+
+    <script>
+        // Wait for the HTML document to be fully loaded and parsed
+        document.addEventListener('DOMContentLoaded', () => {
+            const gridContainer = document.querySelector('.image-grid');
+            const refreshInterval = 30000; // 30 seconds in milliseconds
+
+            // --- 1. Duplicate a random image ---
+            const initialItems = gridContainer.querySelectorAll('.grid-item');
+            if (initialItems.length > 0) {
+                const randomIndex = Math.floor(Math.random() * initialItems.length);
+                const clonedItem = initialItems[randomIndex].cloneNode(true);
+                gridContainer.appendChild(clonedItem);
+            }
+
+            // --- 2. Handle click-to-enlarge ---
+            gridContainer.addEventListener('click', (event) => {
+                const clickedItem = event.target.closest('.grid-item');
+                if (!clickedItem) return;
+
+                const isFullscreenActive = document.body.classList.contains('fullscreen-active');
+
+                if (isFullscreenActive) {
+                    if (clickedItem.classList.contains('fullscreen')) {
+                        clickedItem.classList.remove('fullscreen');
+                        document.body.classList.remove('fullscreen-active');
+                    }
+                } else {
+                    clickedItem.classList.add('fullscreen');
+                    document.body.classList.add('fullscreen-active');
+                }
+            });
+
+            // --- 3. Auto-refresh images every 30 seconds ---
+            function refreshImages() {
+                // Select ALL images currently in the grid (including the cloned one and the fullscreen one if active)
+                const allImages = gridContainer.querySelectorAll('.grid-item img');
+                const timestamp = Date.now(); // Unique timestamp for cache busting
+
+                allImages.forEach(img => {
+                    let currentSrc = img.src;
+                    // Skip placeholder images
+                    if (currentSrc.startsWith('https://placehold.co')) {
+                        return;
+                    }
+
+                    // Remove existing cache buster parameter 't=' if present
+                    // This regex handles both ?t=... and &t=...
+                    currentSrc = currentSrc.replace(/([&?])t=\d+/g, '$1');
+
+                    // Remove trailing '&' or '?' if the 't' parameter was the only one or the last one
+                    currentSrc = currentSrc.replace(/[?&]$/, '');
+
+                    // Determine the correct separator ('?' or '&')
+                    const separator = currentSrc.includes('?') ? '&' : '?';
+
+                    // Append the new cache buster parameter
+                    img.src = `${currentSrc}${separator}t=${timestamp}`;
+                });
+                 console.log(`Images refreshed at ${new Date().toLocaleTimeString()}`); // Optional: for debugging
+            }
+
+            // Set the interval to call refreshImages
+            setInterval(refreshImages, refreshInterval);
+
+            // Optional: Refresh images immediately on load as well
+            // refreshImages(); // Uncomment this line if you want an immediate refresh on load
+
+        });
+    </script>
+</body>
+</html>
+

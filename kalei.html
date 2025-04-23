@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>kaleidoscope</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/addons/p5.dom.min.js"></script>
+    <style>
+        /* Define CSS Variables for Theming */
+        :root {
+            --bg-color: #000;
+            --text-color: #ccc;
+            --slider-bg: #333;
+            --slider-thumb: #ccc;
+            --button-bg: #333;
+            --button-border: #555;
+            --mask-color-val: 0, 0, 0; /* RGB values for black */
+        }
+
+        body.light-theme {
+            --bg-color: #f0f0f0;
+            --text-color: #333;
+            --slider-bg: #ccc;
+            --slider-thumb: #555;
+            --button-bg: #e0e0e0;
+            --button-border: #aaa;
+            --mask-color-val: 240, 240, 240; /* RGB values for light grey */
+        }
+
+        /* Apply Variables (styles remain the same) */
+        html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: var(--bg-color); display: block; touch-action: none; transition: background-color 0.3s ease; }
+        canvas { display: block; }
+        .slider-container { position: absolute; left: 50%; transform: translateX(-50%); width: 66.67%; padding: 15px; box-sizing: border-box; touch-action: auto; z-index: 10; }
+        #speedSliderContainer { top: 15px; }
+        #thicknessSliderContainer { bottom: 15px; }
+        .slider-container input[type="range"] { width: 100%; cursor: pointer; touch-action: auto; appearance: none; height: 8px; background: var(--slider-bg); border-radius: 5px; outline: none; transition: background-color 0.3s ease; }
+        .slider-container input[type="range"]::-webkit-slider-thumb { appearance: none; width: 18px; height: 18px; background: var(--slider-thumb); border-radius: 50%; cursor: pointer; transition: background-color 0.3s ease; }
+        .slider-container input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; background: var(--slider-thumb); border-radius: 50%; cursor: pointer; border: none; transition: background-color 0.3s ease; }
+        #themeToggleButton { position: absolute; top: 15px; right: 15px; z-index: 20; padding: 5px 10px; font-size: 18px; line-height: 1; background-color: var(--button-bg); color: var(--text-color); border: 1px solid var(--button-border); border-radius: 5px; cursor: pointer; min-width: 40px; text-align: center; transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease; }
+        #themeToggleButton:hover { opacity: 0.8; }
+    </style>
+</head>
+<body>
+    <button id="themeToggleButton"></button>
+    <div id="speedSliderContainer" class="slider-container"><input type="range" id="speedSlider" min="0" max="100" value="50" step="1"></div>
+    <div id="thicknessSliderContainer" class="slider-container"><input type="range" id="thicknessSlider" min="1" max="25" value="4" step="0.5"></div>
+
+    <script>
+        // --- p5.js Sketch ---
+
+        let symmetry = 6;
+        let angle;
+        const thicknessStorageKey = 'kaleidoscopeThickness';
+        const speedStorageKey = 'kaleidoscopeSpeed';
+        const themeStorageKey = 'kaleidoscopeTheme';
+
+        // Sliders & Interaction
+        let thicknessSlider, thicknessSliderContainer;
+        let speedSlider, speedSliderContainer;
+        let isInteractingWithThicknessSlider = false;
+        let isInteractingWithSpeedSlider = false;
+
+        // Theme
+        let themeButton;
+        let currentTheme = 'dark';
+        let maskColor; // p5 color object for mask fill and buffer background
+
+        // Graphics Buffers
+        let bgBuffer;       // Holds only the background color
+        let lineBuffer;     // Holds only the drawn lines (transparent background)
+
+        // Auto-Rotation
+        let isRotating = true;
+        let autoRotationAngle = 0;
+        const MAX_ROTATION_SPEED = 10;
+        let currentRotationSpeed = 0;
+        const ROTATION_EASING_FACTOR = 0.05;
+
+        // Circular Area
+        let circleRadius;
+
+        function setup() {
+            createCanvas(windowWidth, windowHeight);
+            angle = 360 / symmetry;
+            angleMode(DEGREES);
+            colorMode(HSB, 360, 100, 100, 1.0);
+
+            calculateCircleRadius();
+
+            // Select Theme Button First
+            themeButton = select('#themeToggleButton');
+
+            // Load and Apply Theme (Sets maskColor)
+            let savedTheme = localStorage.getItem(themeStorageKey) || 'dark';
+            // applyTheme will be called, setting maskColor
+
+            // Initialize Graphics Buffers
+            bgBuffer = createGraphics(windowWidth, windowHeight);
+            bgBuffer.colorMode(RGB);
+            bgBuffer.angleMode(DEGREES);
+
+            lineBuffer = createGraphics(windowWidth, windowHeight);
+            lineBuffer.colorMode(HSB, 360, 100, 100, 1.0); // Use HSB for drawing strokes
+            lineBuffer.angleMode(DEGREES);
+
+            // Apply initial theme (which sets maskColor and clears buffers correctly)
+            applyTheme(savedTheme);
+
+
+            // Select Sliders & Containers
+            thicknessSlider = select('#thicknessSlider');
+            thicknessSliderContainer = select('#thicknessSliderContainer');
+            speedSlider = select('#speedSlider');
+            speedSliderContainer = select('#speedSliderContainer');
+
+            // Load Saved Slider Values
+            loadSliderValues();
+
+            // Event Listeners
+            themeButton.mousePressed(toggleTheme);
+            thicknessSlider.input(saveThicknessSliderValue);
+            speedSlider.input(saveSpeedSliderValue);
+            thicknessSliderContainer.elt.addEventListener('pointerdown', handlePointerDown);
+            speedSliderContainer.elt.addEventListener('pointerdown', handlePointerDown);
+            window.addEventListener('pointerup', handlePointerUp);
+            window.addEventListener('pointercancel', handlePointerUp);
+        }
+
+        // --- Event Handlers & Local Storage ---
+        function handlePointerDown(e) { /* ... remains same ... */
+            if (thicknessSliderContainer.elt.contains(e.target)) { isInteractingWithThicknessSlider = true; }
+            else if (speedSliderContainer.elt.contains(e.target)) { isInteractingWithSpeedSlider = true; }
+        }
+        function handlePointerUp() { /* ... remains same ... */
+             isInteractingWithThicknessSlider = false; isInteractingWithSpeedSlider = false;
+        }
+        function saveThicknessSliderValue() { /* ... remains same ... */ localStorage.setItem(thicknessStorageKey, thicknessSlider.value()); }
+        function saveSpeedSliderValue() { /* ... remains same ... */ localStorage.setItem(speedStorageKey, speedSlider.value()); }
+        function loadSliderValues() { /* ... remains same ... */
+             let savedThickness = localStorage.getItem(thicknessStorageKey); if (savedThickness !== null) { thicknessSlider.value(savedThickness); }
+             let savedSpeed = localStorage.getItem(speedStorageKey); speedSlider.value(savedSpeed !== null ? savedSpeed : 50);
+        }
+
+        // --- Theme Handling ---
+        function applyTheme(theme) {
+            currentTheme = theme;
+            let buttonSymbol = '';
+            // Determine theme colors and symbol
+            if (theme === 'light') {
+                document.body.classList.add('light-theme');
+                maskColor = color(240); // p5 color for light grey
+                buttonSymbol = '🌙';
+            } else { // dark theme
+                document.body.classList.remove('light-theme');
+                maskColor = color(0); // p5 color for black
+                buttonSymbol = '☀️';
+            }
+            // Update button symbol
+            if (themeButton) { themeButton.html(buttonSymbol); }
+
+            // Update ONLY the background buffer color
+            if (bgBuffer) {
+                 bgBuffer.background(maskColor); // Clear bg buffer with new theme color
+            }
+            // DO NOT CLEAR lineBuffer here
+
+            localStorage.setItem(themeStorageKey, theme); // Save theme preference
+        }
+        function toggleTheme() {
+            let newTheme = (currentTheme === 'dark') ? 'light' : 'dark';
+            applyTheme(newTheme);
+        }
+
+        // --- Utility Functions ---
+        function calculateCircleRadius() { /* ... remains same ... */
+            let sliderVerticalSpace = 120; let availableHeight = height - sliderVerticalSpace;
+            availableHeight = max(20, availableHeight); circleRadius = min(width, availableHeight) * 0.4;
+            circleRadius = max(10, circleRadius);
+        }
+
+        // --- Main Draw Loop ---
+        function draw() { /* ... remains the same as previous version ... */
+            let isInteractingWithAnySlider = isInteractingWithThicknessSlider || isInteractingWithSpeedSlider;
+
+            // Determine Rotation State
+            let pointerDownInsideCircle = false;
+            if (mouseIsPressed || touches.length > 0) {
+                let d = dist(mouseX, mouseY, width / 2, height / 2);
+                if (d <= circleRadius) { pointerDownInsideCircle = true; }
+            }
+            isRotating = !pointerDownInsideCircle;
+
+            // Apply Fading Background to Main Canvas
+            let currentBgColor = getComputedStyle(document.body).getPropertyValue('--bg-color');
+            let bg = color(currentBgColor);
+            background(red(bg), green(bg), blue(bg), 0.1 * 255);
+
+            // Update Auto-Rotation Angle
+            let sliderVal = speedSlider.value(); let centerVal = 50;
+            let magnitude = abs(sliderVal - centerVal); let targetRotationSpeed = 0;
+            if (magnitude > 0) {
+                 let base = 1.1; let scaleFactor = MAX_ROTATION_SPEED / (pow(base, 50) - 1);
+                 let speedMagnitude = scaleFactor * (pow(base, magnitude) - 1);
+                 speedMagnitude = max(0, speedMagnitude);
+                 targetRotationSpeed = (sliderVal < centerVal) ? -speedMagnitude : speedMagnitude;
+            }
+            if (isRotating) {
+                currentRotationSpeed = lerp(currentRotationSpeed, targetRotationSpeed, ROTATION_EASING_FACTOR);
+                autoRotationAngle = (autoRotationAngle + currentRotationSpeed) % 360;
+            } else { currentRotationSpeed = 0; }
+
+             // Handle User Drawing Interaction (Draw to lineBuffer)
+            if (pointerDownInsideCircle && !isInteractingWithAnySlider && dist(mouseX, mouseY, pmouseX, pmouseY) > 1) {
+                // User is Drawing
+                let currentThickness = thicknessSlider.value();
+                let mx = mouseX - width / 2; let my = mouseY - height / 2;
+                let pmx = pmouseX - width / 2; let pmy = pmouseY - height / 2;
+
+                lineBuffer.push();
+                lineBuffer.colorMode(HSB, 360, 100, 100, 1.0);
+                let baseHue = map(mouseX, 0, width, 0, 360);
+                let timeOffset = frameCount * 0.5;
+                let hue = (baseHue + timeOffset) % 360;
+
+                lineBuffer.translate(width / 2, height / 2);
+                lineBuffer.strokeWeight(currentThickness);
+                lineBuffer.stroke(hue, 80, 90, 0.9);
+                for (let i = 0; i < symmetry; i++) {
+                    lineBuffer.rotate(angle);
+                    lineBuffer.line(mx, my, pmx, pmy);
+                    lineBuffer.push(); lineBuffer.scale(1, -1); lineBuffer.line(mx, my, pmx, pmy); lineBuffer.pop();
+                }
+                lineBuffer.pop();
+            } // End drawing check
+
+            // Draw the Layered Buffers & Mask
+            push();
+            translate(width / 2, height / 2);
+            rotate(autoRotationAngle);
+            // Draw background buffer first
+            image(bgBuffer, -width / 2, -height / 2);
+            // Draw line buffer on top
+            image(lineBuffer, -width / 2, -height / 2);
+            rotate(-autoRotationAngle); // Rotate mask back
+            // Apply Overlay Mask
+            fill(maskColor); noStroke(); beginShape();
+            vertex(-width/2, -height/2); vertex(width/2, -height/2); vertex(width/2, height/2); vertex(-width/2, height/2);
+            beginContour();
+            for (let a = 360; a >= 0; a -= 5) { vertex(cos(a) * circleRadius, sin(a) * circleRadius); }
+            endContour(); endShape(CLOSE);
+            pop();
+
+        } // End draw()
+
+        // --- UPDATED windowResized Function ---
+        function windowResized() {
+            // --- Capture old line buffer content ---
+            let oldLineBufferImage = lineBuffer.get(); // Get image before resize
+
+            // Resize main canvas
+            resizeCanvas(windowWidth, windowHeight);
+            calculateCircleRadius(); // Recalculate radius for new size
+
+            // Resize buffers
+            bgBuffer.resize(windowWidth, windowHeight);
+            lineBuffer.resize(windowWidth, windowHeight);
+
+            // Clear bgBuffer with current theme color
+            if (maskColor) { bgBuffer.background(maskColor); }
+            else { bgBuffer.background(0); } // Fallback
+
+            // --- Restore old drawing onto resized lineBuffer ---
+            lineBuffer.clear(); // Clear the resized line buffer (make transparent)
+            // Draw the old image centered onto the cleared buffer
+            lineBuffer.imageMode(CENTER); // Draw relative to center
+            lineBuffer.image(oldLineBufferImage, lineBuffer.width / 2, lineBuffer.height / 2);
+            lineBuffer.imageMode(CORNER); // Reset imageMode
+
+            // Reset rotation states
+            isRotating = true;
+            autoRotationAngle = 0;
+            currentRotationSpeed = 0;
+            isInteractingWithThicknessSlider = false;
+            isInteractingWithSpeedSlider = false;
+
+            // Re-apply theme symbol to button (doesn't affect buffers)
+            applyTheme(currentTheme); // Call applyTheme to reset button symbol
+        }
+        // --- End p5.js Sketch ---
+    </script>
+</body>
+</html>
